@@ -149,7 +149,7 @@ func TestSuccessWithCode(t *testing.T) {
 
 	data := map[string]string{"key": "value"}
 	message := "Resource created"
-	expected := `{"status":"success","code":"Created","message":"Resource created","data":{"key":"value"}}`
+	expected := `{"status":"success","code":"CREATED","message":"Resource created","data":{"key":"value"}}`
 
 	t.Run("http.ResponseWriter", func(t *testing.T) {
 		responder := response.NewResponder[http.ResponseWriter](mockLogger)

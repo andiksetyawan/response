@@ -39,22 +39,22 @@ func (r *responder[T]) respond(w T, httpStatusCode int, response interface{}) (e
 }
 
 // Success writes a success response with status OK
-func (r *responder[T]) Success(w T, data interface{}, message string) error {
-	return r.SuccessWithCode(w, http.StatusOK, data, message)
+func (r *responder[T]) Success(w T, data interface{}, msg string) error {
+	return r.SuccessWithCode(w, http.StatusOK, data, msg)
 }
 
 // SuccessWithCode writes a success response with a custom status code
-func (r *responder[T]) SuccessWithCode(w T, code int, data any, message string) error {
+func (r *responder[T]) SuccessWithCode(w T, httpStatusCode int, data any, msg string) error {
 	response := SuccessResponse[T]{
 		Response: Response{
 			Status:  "success",
-			Code:    http.StatusText(code),
-			Message: message,
+			Code:    strings.ReplaceAll(strings.ToUpper(http.StatusText(httpStatusCode)), " ", "_"),
+			Message: msg,
 		},
 		Data: data,
 	}
 
-	return r.respond(w, code, response)
+	return r.respond(w, httpStatusCode, response)
 }
 
 // Error writes an error response
