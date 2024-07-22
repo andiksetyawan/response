@@ -43,5 +43,5 @@ HTTP Response:
 ```
 
 ### TODO
--[ ] http error wrap
--[ ] log error request header/body
+- [ ] http error wrap
+- [ ] log error request header/body
