@@ -1,6 +1,7 @@
 package response
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -11,16 +12,38 @@ import (
 )
 
 type responder[T any] struct {
-	log log.Logger
+	log       log.Logger
+	logAttrs  []any
+	logErrMsg string
 }
 
-// NewResponder creates a new responder instance
-func NewResponder[T any](logger log.Logger) *responder[T] {
-	return &responder[T]{log: logger}
+type OptFunc[T any] func(o *responder[T]) error
+
+func WithErrLogger[T any](logger log.Logger, logErrMsg string, attrs ...any) OptFunc[T] {
+	return func(h *responder[T]) (err error) {
+		h.log = logger
+		h.logAttrs = append(h.logAttrs, attrs...)
+		h.logErrMsg = logErrMsg
+		return
+	}
 }
 
-func (r *responder[T]) respond(w T, httpStatusCode int, response interface{}) (err error) {
-	switch writer := any(w).(type) {
+// NewResponder creates a newriterresponder instance
+func NewResponder[T any](opt ...OptFunc[T]) (h *responder[T], err error) {
+	h = new(responder[T])
+
+	for _, fn := range opt {
+		err = fn(h)
+		if err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+func (r *responder[T]) respond(writer T, httpStatusCode int, response interface{}) (err error) {
+	switch writer := any(writer).(type) {
 	case http.ResponseWriter:
 		writer.Header().Set("Content-Type", "application/json")
 		writer.WriteHeader(httpStatusCode)
@@ -38,13 +61,28 @@ func (r *responder[T]) respond(w T, httpStatusCode int, response interface{}) (e
 	return
 }
 
+func (r *responder[T]) logErr(ctx context.Context, err error) {
+	var attrs []any
+	if len(r.logAttrs) != 0 {
+		attrs = append(attrs, r.logAttrs)
+	}
+
+	message := r.logErrMsg
+	if message == "" {
+		message = "response error"
+	}
+
+	attrs = append(attrs, "error", err)
+	r.log.Error(ctx, message, attrs...)
+}
+
 // Success writes a success response with status OK
-func (r *responder[T]) Success(w T, data interface{}, msg string) error {
-	return r.SuccessWithCode(w, http.StatusOK, data, msg)
+func (r *responder[T]) Success(ctx context.Context, writer T, data interface{}, msg string) error {
+	return r.SuccessWithCode(ctx, writer, http.StatusOK, data, msg)
 }
 
 // SuccessWithCode writes a success response with a custom status code
-func (r *responder[T]) SuccessWithCode(w T, httpStatusCode int, data any, msg string) error {
+func (r *responder[T]) SuccessWithCode(ctx context.Context, writer T, httpStatusCode int, data any, msg string) error {
 	response := SuccessResponse[T]{
 		Response: Response{
 			Status:  "success",
@@ -54,13 +92,17 @@ func (r *responder[T]) SuccessWithCode(w T, httpStatusCode int, data any, msg st
 		Data: data,
 	}
 
-	return r.respond(w, httpStatusCode, response)
+	return r.respond(writer, httpStatusCode, response)
 }
 
 // Error writes an error response
-func (r *responder[T]) Error(w T, httpStatusCode int, err error, msg string) error {
+func (r *responder[T]) Error(ctx context.Context, writer T, httpStatusCode int, err error, msg string) error {
 	if msg == "" {
 		msg = http.StatusText(httpStatusCode)
+	}
+
+	if r.logErrMsg != "" {
+		r.logErr(ctx, err)
 	}
 
 	response := ErrorResponse{
@@ -71,11 +113,11 @@ func (r *responder[T]) Error(w T, httpStatusCode int, err error, msg string) err
 		},
 		Errors: strings.Split(err.Error(), "\n"),
 	}
-	return r.respond(w, httpStatusCode, response)
+	return r.respond(writer, httpStatusCode, response)
 }
 
 // ErrorCustomCode writes an error response with a custom error code
-func (r *responder[T]) ErrorCustomCode(w T, httpStatusCode int, errorCode string, err error, msg string) error {
+func (r *responder[T]) ErrorCustomCode(ctx context.Context, writer T, httpStatusCode int, errorCode string, err error, msg string) error {
 	response := ErrorResponse{
 		Response: Response{
 			Status:  "error",
@@ -84,5 +126,5 @@ func (r *responder[T]) ErrorCustomCode(w T, httpStatusCode int, errorCode string
 		},
 		Errors: strings.Split(err.Error(), "\n"),
 	}
-	return r.respond(w, httpStatusCode, response)
+	return r.respond(writer, httpStatusCode, response)
 }
